@@ -191,13 +191,23 @@ _ALIASES: Dict[str, str] = {
 def distribute_topics(topics: List[str], count: int) -> List[str]:
     if not topics:
         return []
-    result: List[str] = []
-    idx = 0
-    while len(result) < count:
-        result.append(topics[idx % len(topics)])
-        idx += 1
-    random.shuffle(result)
-    return result
+
+    topics = list(topics)
+    random.shuffle(topics)
+
+    if len(topics) <= count:
+        result: List[str] = []
+        idx = 0
+        while len(result) < count:
+            result.append(topics[idx % len(topics)])
+            idx += 1
+        return result
+    else:
+        # If there are more topics than questions requested, group them.
+        buckets: List[List[str]] = [[] for _ in range(count)]
+        for i, t in enumerate(topics):
+            buckets[i % count].append(t)
+        return [" and ".join(b) for b in buckets]
 
 
 def dedupe_questions(questions: List[Question]) -> List[Question]:
@@ -361,7 +371,9 @@ def call_openrouter(subjects: List[str], types: List[str], count: int) -> List[Q
 
     prompt = (
         "Generate high-quality varied technical questions.\n"
-        "CRITICAL INSTRUCTION: You must strictly adhere to the exact topics requested below.\n"
+        "CRITICAL INSTRUCTION 1: You must strictly adhere to the exact topics requested below.\n"
+        "CRITICAL INSTRUCTION 2: Every single question MUST test COMPLETELY DIFFERENT concepts. If the exact same topic appears multiple times, you must address totally distinct aspects, features, or difficulty levels (e.g. beginner vs advanced) to ensure 5 UNIQUE questions.\n"
+        "CRITICAL INSTRUCTION 3: If a topic string combines multiple tools (e.g. 'React and CSS'), the scenario must be a multi-part question intricately blending ALL those tools together.\n"
         "For each question, the scenario, answer, options, or coding requirements MUST be explicitly and deeply about the assigned topic.\n"
         f"Topics (one per question, use them IN THIS EXACT ORDER): {json.dumps(distributed)}\n"
         f"Allowed types: {json.dumps(types)}\n"
