@@ -3,11 +3,19 @@
 import { motion, Variants } from "framer-motion";
 import Link from "next/link";
 import { Inter } from "next/font/google";
+import { useEffect, useState } from "react";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export default function AboutPage() {
-    const containerVariants = {
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    useEffect(() => {
+        if (typeof window !== "undefined" && localStorage.getItem("sage_token")) {
+            setIsLoggedIn(true);
+        }
+    }, []);
+
+    const containerVariants: Variants = {
         hidden: { opacity: 0 },
         show: {
             opacity: 1,
@@ -54,11 +62,13 @@ export default function AboutPage() {
                 </Link>
                 <div className="flex items-center gap-3">
                     <Link href="/profile" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-neutral-900/80">
-                        Dashboard
+                        {isLoggedIn ? "Profile" : "Dashboard"}
                     </Link>
-                    <Link href="/login" className="text-sm font-medium px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white transition-all">
-                        Login
-                    </Link>
+                    {!isLoggedIn && (
+                        <Link href="/login" className="text-sm font-medium px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white transition-all">
+                            Login
+                        </Link>
+                    )}
                     <Link href="/">
                         <motion.button
                             whileHover={{ scale: 1.05 }}
