@@ -513,21 +513,33 @@ function MainApp() {
   };
 
   // --------- Reset State Helper ---------
-  const resetQuestionState = () => {
+  const resetQuestionState = (idx?: number) => {
+    const targetIdx = idx !== undefined ? idx : currentIdx;
+    const targetQ = questions[targetIdx];
+
     setAttemptsLeft(2);
     setLastWrongIndex(null);
     setFeedback({ status: "idle" });
     setBlankInput("");
 
-    // ✅ reset new states
     setShortAnswer("");
     setShortLineOk([false, false, false, false]);
     setShortScore01(0);
 
-    setCode("");
+    setCode(targetQ?.starterCode || "");
     setCodeMatched([]);
     setCodeMissing([]);
     setCodeScore01(0);
+
+    // Default language logic
+    if (targetQ?.language) {
+      setCodeLanguage(targetQ.language);
+    } else {
+      // Fallback to topic default if currentTopic is available, 
+      // but currentTopic is a useMemo based on questions[currentIdx].
+      // For simplicity, we can let the UI use the current codeLanguage state 
+      // until the user touches it or the next question provides one.
+    }
   };
 
   // --------- Preview Value Selectors ---------
@@ -1023,14 +1035,16 @@ function MainApp() {
   // --------- Navigation Handlers ---------
   const gotoPrev = () => {
     if (currentIdx > 0) {
-      setCurrentIdx((i) => i - 1);
-      resetQuestionState();
+      const next = currentIdx - 1;
+      setCurrentIdx(next);
+      resetQuestionState(next);
     }
   };
   const gotoNext = () => {
     if (currentIdx < questions.length - 1) {
-      setCurrentIdx((i) => i + 1);
-      resetQuestionState();
+      const next = currentIdx + 1;
+      setCurrentIdx(next);
+      resetQuestionState(next);
     }
   };
 
@@ -1900,7 +1914,14 @@ function MainApp() {
                       {current?.type === "Coding" && (
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
-                            <div className="text-xs uppercase tracking-wide text-neutral-500">Code Editor</div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs uppercase tracking-wide text-neutral-500">Code Editor</div>
+                              {attemptsLeft <= 0 && feedback.status === "wrong" && (
+                                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/30 font-bold uppercase tracking-widest">
+                                  Correct Solution
+                                </span>
+                              )}
+                            </div>
 
                             <div className="flex items-center gap-2">
                               <div className="text-xs text-neutral-400">{(codeScore01 * 100).toFixed(0)}%</div>
@@ -1960,7 +1981,9 @@ function MainApp() {
                               value={code}
                               onChange={(e) => setCode(e.target.value)}
                               spellCheck={false}
-                              className="w-full h-80 font-mono text-[13px] leading-relaxed resize-none bg-neutral-900/40 border border-neutral-800 rounded-xl px-3 py-2 focus:outline-none focus:border-neutral-700"
+                              className={`w-full h-80 font-mono text-[13px] leading-relaxed resize-none bg-neutral-900/40 border border-neutral-800 rounded-xl px-3 py-2 focus:outline-none focus:border-neutral-700
+                                ${attemptsLeft <= 0 && feedback.status === "wrong" ? "text-emerald-300/80" : "text-neutral-200"}
+                              `}
                               placeholder={current.starterCode || "Write code here…"}
                               disabled={attemptsLeft <= 0 || feedback.status === "correct"}
                             />
@@ -1993,8 +2016,7 @@ function MainApp() {
                                 if (codeScore01 >= 0.85) {
                                   setFeedback({
                                     status: "correct",
-                                    hint:
-                                      "Solution looks structurally correct. Preview improved.",
+                                    hint: "Solution looks structurally correct. Preview improved.",
                                   });
                                   applyOutcome("correct");
                                 } else {
@@ -2002,15 +2024,19 @@ function MainApp() {
                                   setAttemptsLeft(remaining);
 
                                   if (remaining <= 0) {
+                                    // SHIFT to correct solution
+                                    if (current.answer) {
+                                      setCode(current.answer);
+                                    }
                                     setFeedback({
                                       status: "wrong",
-                                      hint: `Missing tokens: ${codeMissing.join(", ")}`,
+                                      hint: current.reason || `Final Attempt Exhausted. Correct solution shown above.\nMissing tokens: ${codeMissing.join(", ")}`,
                                     });
                                     applyOutcome("wrongFinal");
                                   } else {
                                     setFeedback({
                                       status: "wrong",
-                                      hint: `Still missing: ${codeMissing.join(", ")}`,
+                                      hint: current.hint || `Hint: Try to include more required tokens like: ${codeMissing.slice(0, 2).join(", ")}`,
                                     });
                                     applyOutcome("wrongHint");
                                   }
