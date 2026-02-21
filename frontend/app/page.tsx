@@ -2183,9 +2183,10 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
                                 } else {
                                   const remaining = attemptsLeft - 1;
                                   setAttemptsLeft(remaining);
-                                  setShowIncidentPopup(true);
 
                                   if (remaining <= 0) {
+                                    // Final wrong attempt — show incident popup
+                                    setShowIncidentPopup(true);
                                     if (current.answer) {
                                       setCode(current.answer);
                                     } else {
@@ -2257,105 +2258,111 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
                   const wrongFinal = feedback.status === "wrong" && attemptsLeft <= 0;
                   const previewOutline = wrongFinal ? "ring-2 ring-red-600/60" : "ring-1 ring-neutral-800/0";
 
-                  // Topic-aware incident popup data
+                  // --- Per-question incident data seeds ---
+                  const qTokens = current?.requiredTokens ?? [];
+                  const fnName = qTokens.find(t => t.startsWith("def ") || t.startsWith("function ") || t.includes("(")) ?? qTokens[0] ?? "unknown_fn";
+                  const missingList = codeMissing.length ? codeMissing.join(", ") : "(none)";
+                  const scenarioSnippet = (current?.scenario ?? "").slice(0, 60).replace(/\(.*?\)/g, "").trim();
+                  const qSeed = currentIdx + 1; // 1-based question number for readable IDs
+
                   const incidentConfig: Record<string, { title: string; icon: string; rows: { label: string; value: string; bad?: boolean }[] }> = {
                     backend: {
                       title: "Production DB Error Log",
                       icon: "🗄️",
                       rows: [
-                        { label: "Error", value: "FATAL: query timeout (>30s)", bad: true },
-                        { label: "Table", value: "orders (locked)", bad: true },
-                        { label: "Connections", value: `${Math.floor(Math.random() * 80 + 180)}/200`, bad: true },
-                        { label: "Rollback", value: "initiated", bad: true },
-                        { label: "Last txn", value: new Date().toLocaleTimeString() },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Query ID", value: `txn-${qSeed}-${Date.now() % 9999}`, bad: true },
+                        { label: "DB error", value: "deadlock detected (lock timeout)", bad: true },
+                        { label: "Rollback", value: "auto-initiated" },
                       ],
                     },
                     frontend: {
                       title: "UI Runtime Exception",
                       icon: "💻",
                       rows: [
-                        { label: "Error", value: "TypeError: Cannot read property", bad: true },
-                        { label: "Component", value: "<DataTable> line 47", bad: true },
-                        { label: "Re-renders", value: "∞ (infinite loop)", bad: true },
-                        { label: "FPS", value: "4 fps", bad: true },
-                        { label: "Hydration", value: "MISMATCH", bad: true },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Component", value: `<Q${qSeed}Widget> line ${qSeed * 7 + 12}`, bad: true },
+                        { label: "Re-renders", value: "∞ (loop caused by missing dep)", bad: true },
+                        { label: "Hydration", value: "MISMATCH — server/client diverged" },
                       ],
                     },
                     ml: {
                       title: "Training Run Crashed",
                       icon: "🧠",
                       rows: [
-                        { label: "Error", value: "NaN loss at epoch 3", bad: true },
-                        { label: "Val loss", value: "diverging (∞)", bad: true },
-                        { label: "GPU OOM", value: "CUDA out of memory", bad: true },
-                        { label: "Checkpoint", value: "not saved", bad: true },
-                        { label: "Status", value: "ABORTED" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Run ID", value: `run-${qSeed}-${Date.now() % 9999}`, bad: true },
+                        { label: "Error", value: `NaN loss at step ${qSeed * 13}`, bad: true },
+                        { label: "Checkpoint", value: "not saved — rollback needed" },
                       ],
                     },
                     devops: {
                       title: "Pipeline Failure",
                       icon: "⚙️",
                       rows: [
-                        { label: "Stage", value: "deploy (step 4/5)", bad: true },
-                        { label: "Exit code", value: "1 — CrashLoopBackOff", bad: true },
-                        { label: "Pods", value: "0/3 running", bad: true },
-                        { label: "Rollback", value: "in progress" },
-                        { label: "ETA", value: "~4 min" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Job ID", value: `ci-${qSeed}-${Date.now() % 9999}`, bad: true },
+                        { label: "Exit code", value: `${qSeed % 5 + 1} — CrashLoopBackOff`, bad: true },
+                        { label: "Rollback", value: "auto-triggered" },
                       ],
                     },
                     sysdesign: {
                       title: "System Outage Alert",
                       icon: "🌐",
                       rows: [
-                        { label: "Status", value: "PARTIAL OUTAGE", bad: true },
-                        { label: "Affected", value: "us-east-1, eu-west-1", bad: true },
-                        { label: "Latency", value: "p99 > 12s", bad: true },
-                        { label: "Error rate", value: "48%", bad: true },
-                        { label: "On-call", value: "paged" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Incident ID", value: `INC-${Date.now() % 9999}`, bad: true },
+                        { label: "p99 latency", value: `${qSeed * 1.4 + 9}s`, bad: true },
+                        { label: "On-call", value: `eng-${qSeed} paged` },
                       ],
                     },
                     mobile: {
                       title: "App Crash Report",
                       icon: "📱",
                       rows: [
-                        { label: "Crash", value: "ANR in MainActivity", bad: true },
-                        { label: "Affected", value: "Android 12+ (34%)", bad: true },
-                        { label: "Crash rate", value: "8.2%", bad: true },
-                        { label: "OOM", value: "detected (heap)", bad: true },
-                        { label: "Store", value: "Review flagged" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Crash ID", value: `crash-${qSeed}-${Date.now() % 9999}`, bad: true },
+                        { label: "Crash rate", value: `${(qSeed * 2.1).toFixed(1)}%`, bad: true },
+                        { label: "Store", value: "Play Store review flagged" },
                       ],
                     },
                     security: {
                       title: "Security Incident",
                       icon: "🔐",
                       rows: [
-                        { label: "Alert", value: "Unauthorized access attempt", bad: true },
-                        { label: "Vector", value: "Unvalidated input (XSS)", bad: true },
-                        { label: "Affected", value: "user sessions (all)", bad: true },
-                        { label: "Auth fails", value: "1,204 in 60s", bad: true },
-                        { label: "Action", value: "SIEM alerted" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "CVE ID", value: `CVE-2025-${qSeed * 317 % 9999}`, bad: true },
+                        { label: "Vector", value: `unescaped input in ${scenarioSnippet || fnName}`, bad: true },
+                        { label: "SIEM", value: "alert fired — investigation started" },
                       ],
                     },
                     dataeng: {
                       title: "Pipeline Dead-lock",
                       icon: "📊",
                       rows: [
-                        { label: "Stage", value: "transform (stuck)", bad: true },
-                        { label: "Backlog", value: "14.2M events queued", bad: true },
-                        { label: "Freshness", value: "2h 18m behind SLA", bad: true },
-                        { label: "Schema", value: "validation failed", bad: true },
-                        { label: "Alert", value: "PagerDuty fired" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Job ID", value: `etl-q${qSeed}-${Date.now() % 9999}`, bad: true },
+                        { label: "Backlog", value: `${qSeed * 3.7}M events queued`, bad: true },
+                        { label: "Freshness", value: `${qSeed + 1}h ${qSeed * 7}m behind SLA` },
                       ],
                     },
                     generic: {
                       title: "System Error",
                       icon: "⚠️",
                       rows: [
-                        { label: "Status", value: "ERROR", bad: true },
-                        { label: "Code", value: "500 Internal", bad: true },
-                        { label: "Message", value: "Unexpected failure", bad: true },
-                        { label: "Trace", value: "see logs", bad: true },
-                        { label: "Recovery", value: "manual required" },
+                        { label: "Function", value: fnName, bad: true },
+                        { label: "Missing", value: missingList, bad: true },
+                        { label: "Trace ID", value: `err-${qSeed}-${Date.now() % 9999}`, bad: true },
+                        { label: "Code", value: "500 Internal Server Error", bad: true },
+                        { label: "Recovery", value: "manual intervention required" },
                       ],
                     },
                   };
