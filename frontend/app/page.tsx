@@ -212,8 +212,8 @@ function IntroScreen({ onStart }: { onStart: (topics: string[]) => void }) {
         >
           <div
             className={`flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition-all duration-200 ${inputFocused
-                ? "border-orange-500/60 bg-neutral-900 shadow-[0_0_32px_rgba(249,115,22,0.12)]"
-                : "border-neutral-800 bg-neutral-900/80"
+              ? "border-orange-500/60 bg-neutral-900 shadow-[0_0_32px_rgba(249,115,22,0.12)]"
+              : "border-neutral-800 bg-neutral-900/80"
               }`}
           >
             {/* Search icon */}
@@ -577,6 +577,14 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [languageTouched, setLanguageTouched] = useState(false);
 
+  // ---------- Idle timer ----------
+  const [idleSeconds, setIdleSeconds] = useState(0);
+  const lastCodeRef = useRef(code);
+  const idleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ---------- Incident popup ----------
+  const [showIncidentPopup, setShowIncidentPopup] = useState(false);
+
   const activeType = questionTypes[0];
 
 
@@ -879,7 +887,6 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
     if (!current || current.type !== "Coding") return;
 
     // Prefill code only when current question changes or is first loaded
-    // We don't depend on 'code' state here to avoid interfering with user typing or programmatic updates
     if (!code || code.trim() === "" || code === "// implement solution here") {
       setCode(current.starterCode || "// implement solution here");
     }
@@ -888,8 +895,39 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
     setCodeLanguage((prev) => (languageTouched ? prev : inferred));
 
     setLanguageMenuOpen(false);
+    // Reset idle timer when question changes
+    setIdleSeconds(0);
+    lastCodeRef.current = code;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIdx, current?.type]);
+
+  // --------- Idle Timer ---------
+  useEffect(() => {
+    if (!current || current.type !== "Coding") return;
+    if (feedback.status === "correct" || (feedback.status === "wrong" && attemptsLeft <= 0)) return;
+
+    if (idleIntervalRef.current) clearInterval(idleIntervalRef.current);
+    idleIntervalRef.current = setInterval(() => {
+      if (code !== lastCodeRef.current) {
+        // User typed — reset idle counter
+        lastCodeRef.current = code;
+        setIdleSeconds(0);
+      } else {
+        setIdleSeconds(prev => {
+          const next = prev + 1;
+          // Every 8 seconds of idle, degrade stats for Veteran / Working Professional
+          if (next % 8 === 0) {
+            const shouldDegrade = difficulty === "Veteran" || difficulty === "Working Professional";
+            if (shouldDegrade) applyOutcome("wrongHint");
+          }
+          return next;
+        });
+      }
+    }, 1000);
+
+    return () => { if (idleIntervalRef.current) clearInterval(idleIntervalRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, code, feedback.status, attemptsLeft, difficulty]);
 
   useEffect(() => {
     if (!current || current.type !== "Coding") return;
@@ -2081,26 +2119,42 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
                           </div>
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3">
-                              <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-                                Matched
-                              </div>
-                              <div className="text-sm text-emerald-200">
-                                {codeMatched.length ? codeMatched.join(", ") : "—"}
+                            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3 min-w-0">
+                              <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Matched</div>
+                              <div className="flex flex-wrap gap-1.5 min-w-0">
+                                {codeMatched.length
+                                  ? codeMatched.map(t => (
+                                    <span key={t} className="inline-block px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 text-xs font-mono truncate max-w-[120px]">{t}</span>
+                                  ))
+                                  : <span className="text-sm text-neutral-500">—</span>}
                               </div>
                             </div>
 
-                            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3">
-                              <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">
-                                Missing
-                              </div>
-                              <div className="text-sm text-red-200">
-                                {codeMissing.length ? codeMissing.join(", ") : "—"}
+                            <div className="rounded-2xl border border-neutral-800 bg-neutral-950/60 p-3 min-w-0">
+                              <div className="text-xs uppercase tracking-wide text-neutral-500 mb-2">Missing</div>
+                              <div className="flex flex-wrap gap-1.5 min-w-0">
+                                {codeMissing.length
+                                  ? codeMissing.map(t => (
+                                    <span key={t} className="inline-block px-2 py-0.5 rounded-full bg-red-500/15 text-red-300 border border-red-500/20 text-xs font-mono truncate max-w-[120px]">{t}</span>
+                                  ))
+                                  : <span className="text-sm text-neutral-500">—</span>}
                               </div>
                             </div>
                           </div>
 
-                          <div className="flex justify-end">
+                          {/* Idle timer display */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-neutral-500">
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+                                <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                              </svg>
+                              {idleSeconds > 0
+                                ? <span className={idleSeconds >= 8 && (difficulty === "Veteran" || difficulty === "Working Professional") ? "text-red-400" : "text-neutral-500"}>
+                                  Idle: {idleSeconds}s{(difficulty === "Veteran" || difficulty === "Working Professional") && idleSeconds >= 8 ? " — system degrading" : ""}
+                                </span>
+                                : <span>Timer active</span>}
+                            </div>
                             <motion.button
                               whileTap={{ scale: 0.98 }}
                               onClick={() => {
@@ -2110,12 +2164,13 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
                                     hint: "Solution looks structurally correct. Preview improved.",
                                   });
                                   applyOutcome("correct");
+                                  setShowIncidentPopup(false);
                                 } else {
                                   const remaining = attemptsLeft - 1;
                                   setAttemptsLeft(remaining);
+                                  setShowIncidentPopup(true);
 
                                   if (remaining <= 0) {
-                                    // SHIFT to correct solution
                                     if (current.answer) {
                                       setCode(current.answer);
                                     } else {
@@ -2182,24 +2237,170 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
               />
 
               {/* Right pane */}
-              <div style={{ width: `${100 - leftPct}%` }} className="min-w-[320px] min-w-0">
+              <div style={{ width: `${100 - leftPct}%` }} className="min-w-[320px] min-w-0 relative">
                 {(() => {
                   const wrongFinal = feedback.status === "wrong" && attemptsLeft <= 0;
                   const previewOutline = wrongFinal ? "ring-2 ring-red-600/60" : "ring-1 ring-neutral-800/0";
+
+                  // Topic-aware incident popup data
+                  const incidentConfig: Record<string, { title: string; icon: string; rows: { label: string; value: string; bad?: boolean }[] }> = {
+                    backend: {
+                      title: "Production DB Error Log",
+                      icon: "🗄️",
+                      rows: [
+                        { label: "Error", value: "FATAL: query timeout (>30s)", bad: true },
+                        { label: "Table", value: "orders (locked)", bad: true },
+                        { label: "Connections", value: `${Math.floor(Math.random() * 80 + 180)}/200`, bad: true },
+                        { label: "Rollback", value: "initiated", bad: true },
+                        { label: "Last txn", value: new Date().toLocaleTimeString() },
+                      ],
+                    },
+                    frontend: {
+                      title: "UI Runtime Exception",
+                      icon: "💻",
+                      rows: [
+                        { label: "Error", value: "TypeError: Cannot read property", bad: true },
+                        { label: "Component", value: "<DataTable> line 47", bad: true },
+                        { label: "Re-renders", value: "∞ (infinite loop)", bad: true },
+                        { label: "FPS", value: "4 fps", bad: true },
+                        { label: "Hydration", value: "MISMATCH", bad: true },
+                      ],
+                    },
+                    ml: {
+                      title: "Training Run Crashed",
+                      icon: "🧠",
+                      rows: [
+                        { label: "Error", value: "NaN loss at epoch 3", bad: true },
+                        { label: "Val loss", value: "diverging (∞)", bad: true },
+                        { label: "GPU OOM", value: "CUDA out of memory", bad: true },
+                        { label: "Checkpoint", value: "not saved", bad: true },
+                        { label: "Status", value: "ABORTED" },
+                      ],
+                    },
+                    devops: {
+                      title: "Pipeline Failure",
+                      icon: "⚙️",
+                      rows: [
+                        { label: "Stage", value: "deploy (step 4/5)", bad: true },
+                        { label: "Exit code", value: "1 — CrashLoopBackOff", bad: true },
+                        { label: "Pods", value: "0/3 running", bad: true },
+                        { label: "Rollback", value: "in progress" },
+                        { label: "ETA", value: "~4 min" },
+                      ],
+                    },
+                    sysdesign: {
+                      title: "System Outage Alert",
+                      icon: "🌐",
+                      rows: [
+                        { label: "Status", value: "PARTIAL OUTAGE", bad: true },
+                        { label: "Affected", value: "us-east-1, eu-west-1", bad: true },
+                        { label: "Latency", value: "p99 > 12s", bad: true },
+                        { label: "Error rate", value: "48%", bad: true },
+                        { label: "On-call", value: "paged" },
+                      ],
+                    },
+                    mobile: {
+                      title: "App Crash Report",
+                      icon: "📱",
+                      rows: [
+                        { label: "Crash", value: "ANR in MainActivity", bad: true },
+                        { label: "Affected", value: "Android 12+ (34%)", bad: true },
+                        { label: "Crash rate", value: "8.2%", bad: true },
+                        { label: "OOM", value: "detected (heap)", bad: true },
+                        { label: "Store", value: "Review flagged" },
+                      ],
+                    },
+                    security: {
+                      title: "Security Incident",
+                      icon: "🔐",
+                      rows: [
+                        { label: "Alert", value: "Unauthorized access attempt", bad: true },
+                        { label: "Vector", value: "Unvalidated input (XSS)", bad: true },
+                        { label: "Affected", value: "user sessions (all)", bad: true },
+                        { label: "Auth fails", value: "1,204 in 60s", bad: true },
+                        { label: "Action", value: "SIEM alerted" },
+                      ],
+                    },
+                    dataeng: {
+                      title: "Pipeline Dead-lock",
+                      icon: "📊",
+                      rows: [
+                        { label: "Stage", value: "transform (stuck)", bad: true },
+                        { label: "Backlog", value: "14.2M events queued", bad: true },
+                        { label: "Freshness", value: "2h 18m behind SLA", bad: true },
+                        { label: "Schema", value: "validation failed", bad: true },
+                        { label: "Alert", value: "PagerDuty fired" },
+                      ],
+                    },
+                    generic: {
+                      title: "System Error",
+                      icon: "⚠️",
+                      rows: [
+                        { label: "Status", value: "ERROR", bad: true },
+                        { label: "Code", value: "500 Internal", bad: true },
+                        { label: "Message", value: "Unexpected failure", bad: true },
+                        { label: "Trace", value: "see logs", bad: true },
+                        { label: "Recovery", value: "manual required" },
+                      ],
+                    },
+                  };
+
+                  const inc = incidentConfig[currentTopic] ?? incidentConfig.generic;
+
                   return (
-                    <div className={`bg-neutral-900 p-5 rounded-2xl shadow-lg h-full border border-neutral-800 min-w-0 ${previewOutline}`}>
-                      <div className="flex items-center justify-between gap-3 mb-3">
-                        <h3 className="text-xs uppercase tracking-wide text-neutral-400 font-medium">Live Preview</h3>
-                        {wrongFinal ? <span className="text-xs text-red-300">Final wrong attempt</span> : null}
-                      </div>
+                    <>
+                      {/* Incident popup — shown on wrong code submit */}
+                      <AnimatePresence>
+                        {showIncidentPopup && current?.type === "Coding" && feedback.status === "wrong" && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -12, scale: 0.97 }}
+                            transition={{ duration: 0.22 }}
+                            className="absolute top-0 left-0 right-0 z-20 mx-0 mb-4"
+                          >
+                            <div className="bg-neutral-950 border border-red-600/40 rounded-2xl shadow-2xl shadow-red-900/20 p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base">{inc.icon}</span>
+                                  <span className="text-xs font-bold uppercase tracking-widest text-red-400">{inc.title}</span>
+                                  <span className="inline-flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />
+                                    <span className="text-[10px] text-red-400 uppercase tracking-widest">LIVE</span>
+                                  </span>
+                                </div>
+                                <button
+                                  onClick={() => setShowIncidentPopup(false)}
+                                  className="text-neutral-500 hover:text-neutral-300 text-lg leading-none"
+                                >×</button>
+                              </div>
+                              <div className="space-y-1.5 font-mono text-xs">
+                                {inc.rows.map((row, i) => (
+                                  <div key={i} className="flex items-center justify-between gap-4">
+                                    <span className="text-neutral-500">{row.label}</span>
+                                    <span className={row.bad ? "text-red-300" : "text-neutral-300"}>{row.value}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
 
-                      {/* Control panel on the right (above preview) */}
-                      <div className="mb-4">
-                        <Controls />
-                      </div>
+                      <div className={`bg-neutral-900 p-5 rounded-2xl shadow-lg h-full border border-neutral-800 min-w-0 ${previewOutline}`}>
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <h3 className="text-xs uppercase tracking-wide text-neutral-400 font-medium">Live Preview</h3>
+                          {wrongFinal ? <span className="text-xs text-red-300">Final wrong attempt</span> : null}
+                        </div>
 
-                      <LivePreview />
-                    </div>
+                        {/* Control panel on the right (above preview) */}
+                        <div className="mb-4">
+                          <Controls />
+                        </div>
+
+                        <LivePreview />
+                      </div>
+                    </>
                   );
                 })()}
               </div>
