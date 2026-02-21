@@ -2,15 +2,17 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
+from dotenv import load_dotenv
+from groq import Groq
 import os
 import io
-import requests
 import random
 import json
 import re
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+load_dotenv()
+GROQ_API_KEY = os.getenv("GROQAPI_KEY", "")
+_groq_client: Optional[Groq] = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 app = FastAPI()
 
@@ -374,12 +376,37 @@ def fallback_questions(subjects: List[str], count: int, force_type: Optional[str
 
 
 # -----------------------------
-# OpenRouter calls
+# Groq calls
 # -----------------------------
+def _groq_complete(prompt: str, temperature: float = 1.0, max_tokens: int = 8192) -> str:
+    """Call Groq with streaming and return the full assembled response string."""
+    if _groq_client is None:
+        raise RuntimeError("Groq client not initialised — check GROQAPI_KEY in .env")
+
+    stream = _groq_client.chat.completions.create(
+        model="openai/gpt-oss-120b",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=temperature,
+        max_completion_tokens=max_tokens,
+        top_p=1,
+        reasoning_effort="medium",
+        stream=True,
+        stop=None,
+    )
+
+    chunks = []
+    for chunk in stream:
+        delta = chunk.choices[0].delta
+        if delta and delta.content:
+            chunks.append(delta.content)
+    return "".join(chunks)
+
+
 def call_openrouter(subjects: List[str], types: List[str], count: int, difficulty: str = "Bachelor") -> List[Question]:
+    """Generate questions via Groq (was OpenRouter)."""
     force_type = types[0] if types and len(types) == 1 else None
 
-    if not OPENROUTER_API_KEY:
+    if not GROQ_API_KEY:
         return fallback_questions(subjects, count, force_type, difficulty)
 
     allowed_types = ["MCQ", "Fill in the Blanks", "Short Answer", "Coding"]
@@ -406,7 +433,6 @@ def call_openrouter(subjects: List[str], types: List[str], count: int, difficult
         "RULE 5: ALL generated coding questions MUST ask for different logical features. Never repeat the same coding requirement twice in one generation sequence.\n\n"
     )
 
-
     if force_type:
         prompt += f'CRITICAL: Every question MUST have "type": "{force_type}".\n\n'
 
@@ -422,39 +448,17 @@ def call_openrouter(subjects: List[str], types: List[str], count: int, difficult
         "6) 'language': The language identifier (e.g. 'python', 'typescript', 'javascript', 'sql', 'bash').\n"
     )
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    body = {
-        "model": "stepfun/step-3.5-flash:free",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.5,
-    }
-
     def _parse_response(raw: str) -> List[Question]:
         content = _strip_code_fences(raw)
         parsed = json.loads(content)
-
         if isinstance(parsed, dict) and "questions" in parsed:
             parsed = parsed["questions"]
-
         if not isinstance(parsed, list):
             raise ValueError("Expected JSON array")
-
         return [Question(**item) for item in parsed]
 
     try:
-        r = requests.post(
-            f"{OPENROUTER_BASE}/chat/completions",
-            json=body,
-            headers=headers,
-            timeout=60,
-        )
-        r.raise_for_status()
-
-        raw_content = r.json()["choices"][0]["message"]["content"]
+        raw_content = _groq_complete(prompt, temperature=1.0, max_tokens=8192)
         questions = dedupe_questions(_parse_response(raw_content))
 
         # 🔥 HARD FORCE TYPES (NO MATTER WHAT MODEL RETURNS)
@@ -468,10 +472,8 @@ def call_openrouter(subjects: List[str], types: List[str], count: int, difficult
                 q.correctIndex = None
 
                 if not q.language:
-                    # Provide a fallback just in case the LLM doesn't supply it
                     q.language = "typescript"
 
-                # Standardize language strings to match frontend IDs
                 q.language = q.language.lower().strip()
 
                 if not q.starterCode:
@@ -479,7 +481,7 @@ def call_openrouter(subjects: List[str], types: List[str], count: int, difficult
 
                 if not q.requiredTokens:
                     q.requiredTokens = ["function", "return"]
-                    
+
                 if not q.answer:
                     q.answer = "// The AI did not provide a complete solution for this question."
                 else:
@@ -501,10 +503,9 @@ def call_openrouter(subjects: List[str], types: List[str], count: int, difficult
         return fallback_questions(subjects, count, force_type, difficulty)
 
 
-
-
 def call_openrouter_topics(pdf_text: str) -> List[str]:
-    if not OPENROUTER_API_KEY:
+    """Extract topics from PDF text via Groq (was OpenRouter)."""
+    if not GROQ_API_KEY:
         return match_topics_from_text(pdf_text)
 
     truncated = pdf_text[:8000]
@@ -521,34 +522,14 @@ def call_openrouter_topics(pdf_text: str) -> List[str]:
         f"DOCUMENT TEXT:\n{truncated}\n"
     )
 
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
-
-    body = {
-        "model": "openai/gpt-4o-mini",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.1,
-    }
-
     try:
-        r = requests.post(
-            f"{OPENROUTER_BASE}/chat/completions",
-            json=body,
-            headers=headers,
-            timeout=30,
-        )
-        r.raise_for_status()
-
-        content = r.json()["choices"][0]["message"]["content"].strip()
-        content = _strip_code_fences(content)
-
+        content = _groq_complete(prompt, temperature=0.1, max_tokens=2048)
+        content = _strip_code_fences(content.strip())
         topics = json.loads(content)
         if isinstance(topics, list):
             return [t for t in topics if t in ALL_TOPICS]
     except Exception as e:
-        print(f"LLM topic extraction failed: {e}")
+        print(f"Groq topic extraction failed: {e}")
 
     return match_topics_from_text(pdf_text)
 
@@ -682,11 +663,11 @@ async def extract_topics(file: UploadFile = File(...)):
 
     matched = match_topics_from_text(text)
 
-    if len(matched) < 5 and OPENROUTER_API_KEY:
+    if len(matched) < 5 and GROQ_API_KEY:
         llm_topics = call_openrouter_topics(text)
         matched = sorted(set(matched) | set(llm_topics))
 
-    if not matched and OPENROUTER_API_KEY:
+    if not matched and GROQ_API_KEY:
         matched = call_openrouter_topics(text)
 
     return {"topics": matched}
