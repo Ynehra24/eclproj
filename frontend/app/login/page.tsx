@@ -3,20 +3,45 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Inter } from "next/font/google";
+import { api, setToken } from "../../lib/api";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
 export default function LoginPage() {
+    const router = useRouter();
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
+    const [error, setError] = useState("");
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        // Mock authentication action
-        console.log(isLogin ? "Logging in..." : "Signing up...", { email, password, name });
+        setError("");
+        setIsLoading(true);
+
+        try {
+            if (isLogin) {
+                // Login
+                const data = await api.login({ email, password });
+                setToken(data.access_token);
+                router.push("/profile");
+            } else {
+                // Register
+                await api.register({ email, password, full_name: name });
+                // Auto-login after register
+                const data = await api.login({ email, password });
+                setToken(data.access_token);
+                router.push("/profile");
+            }
+        } catch (err: any) {
+            setError(err.message || "An error occurred");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const containerVariants = {

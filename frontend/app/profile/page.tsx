@@ -1,25 +1,64 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Inter } from "next/font/google";
+import { api, clearToken } from "../../lib/api";
 
 const inter = Inter({ subsets: ["latin"], display: "swap" });
 
+interface User {
+    id: number;
+    email: string;
+    full_name: string;
+    created_at: string;
+}
+
+interface Activity {
+    id: number;
+    topic: string;
+    title: string;
+    status: string;
+    timestamp: string;
+}
+
 export default function ProfilePage() {
+    const router = useRouter();
+    const [user, setUser] = useState<User | null>(null);
+    const [activities, setActivities] = useState<Activity[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        async function loadProfile() {
+            try {
+                const [userData, userActivities] = await Promise.all([
+                    api.getMe(),
+                    api.getActivities()
+                ]);
+                setUser(userData);
+                setActivities(userActivities);
+            } catch (err) {
+                console.error("Failed to fetch profile", err);
+                router.push("/login");
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        loadProfile();
+    }, [router]);
+
+    const handleSignOut = () => {
+        clearToken();
+        router.push("/");
+    };
+
     const stats = [
         { label: "Level", value: "Veteran", color: "text-orange-400" },
-        { label: "Questions Solved", value: "1,429", color: "text-neutral-100" },
-        { label: "Overall Accuracy", value: "94.2%", color: "text-emerald-400" },
-        { label: "Current Streak", value: "12 Days", color: "text-yellow-400" },
-    ];
-
-    const recentActivity = [
-        { topic: "Backend", title: "Implement Distributed Lock using Redis", status: "Success", time: "2 hours ago" },
-        { topic: "System Design", title: "Design a Global Rate Limiter", status: "Partial", time: "5 hours ago" },
-        { topic: "Frontend", title: "Fix Hydration Mismatch in Next.js", status: "Success", time: "Yesterday" },
-        { topic: "DevOps", title: "Debug CrashLoopBackOff in EKS", status: "Failed", time: "2 days ago" },
-        { topic: "ML", title: "Handle NaN Loss in PyTorch", status: "Success", time: "3 days ago" },
+        { label: "Questions Solved", value: activities.length.toString(), color: "text-neutral-100" },
+        { label: "Overall Accuracy", value: activities.length ? `${Math.round((activities.filter(a => a.status === 'Success').length / activities.length) * 100)}%` : "0%", color: "text-emerald-400" },
+        { label: "Current Streak", value: activities.length ? "1 Days" : "0 Days", color: "text-yellow-400" },
     ];
 
     const containerVariants = {
@@ -31,6 +70,17 @@ export default function ProfilePage() {
         hidden: { opacity: 0, y: 15 },
         show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100 } as any }
     };
+
+    if (isLoading) {
+        return (
+            <div className={`min-h-screen bg-neutral-950 flex flex-col items-center justify-center font-sans ${inter.className}`}>
+                <div className="w-8 h-8 rounded-full border-t-2 border-r-2 border-orange-500 animate-spin mb-4" />
+                <div className="text-neutral-400 text-sm tracking-widest uppercase">Loading Profile</div>
+            </div>
+        );
+    }
+
+    if (!user) return null;
 
     return (
         <div className={`min-h-screen bg-neutral-950 text-neutral-100 font-sans ${inter.className} relative selection:bg-orange-500/30 selection:text-orange-200 pb-20`}>
@@ -51,7 +101,7 @@ export default function ProfilePage() {
                 <nav className="flex items-center gap-6">
                     <Link href="/about" className="text-sm font-medium text-neutral-400 hover:text-neutral-200 transition-colors">About</Link>
                     <Link href="/" className="text-sm font-medium text-neutral-400 hover:text-neutral-200 transition-colors">Dashboard</Link>
-                    <button className="text-sm font-medium px-4 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:bg-neutral-800 hover:border-neutral-500 transition-all">Sign Out</button>
+                    <button onClick={handleSignOut} className="text-sm font-medium px-4 py-1.5 rounded-full border border-neutral-700 text-neutral-300 hover:bg-neutral-800 hover:border-neutral-500 transition-all">Sign Out</button>
                 </nav>
             </header>
 
@@ -64,15 +114,15 @@ export default function ProfilePage() {
                             🧑‍💻
                         </div>
                         <div>
-                            <h1 className="text-3xl font-bold tracking-tight mb-2">Alex Mercer</h1>
+                            <h1 className="text-3xl font-bold tracking-tight mb-2">{user.full_name}</h1>
                             <div className="flex items-center gap-3 text-sm text-neutral-400">
-                                <span>alex.mercer@example.com</span>
+                                <span>{user.email}</span>
                                 <span>•</span>
-                                <span>Joined October 2024</span>
+                                <span>Joined {new Date(user.created_at).toLocaleDateString()}</span>
                                 <span>•</span>
                                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20">
                                     <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-                                    Pro Plan
+                                    Scholar
                                 </span>
                             </div>
                         </div>
@@ -99,25 +149,29 @@ export default function ProfilePage() {
                                 <button className="text-xs font-medium text-orange-400 hover:text-orange-300">View All →</button>
                             </h2>
                             <div className="space-y-4">
-                                {recentActivity.map((act, i) => (
-                                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-neutral-950/50 border border-neutral-800 hover:border-neutral-700 transition-colors group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-sm shadow-inner group-hover:bg-neutral-800 transition-colors">
-                                                {act.topic === "Backend" ? "🗄️" : act.topic === "Frontend" ? "💻" : act.topic === "ML" ? "🧠" : act.topic === "DevOps" ? "⚙️" : "🌐"}
+                                {activities.length === 0 ? (
+                                    <div className="text-neutral-500 text-sm text-center py-8">No recent activity yet. Start training!</div>
+                                ) : (
+                                    activities.slice(0, 5).map((act, i) => (
+                                        <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-neutral-950/50 border border-neutral-800 hover:border-neutral-700 transition-colors group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center justify-center text-sm shadow-inner group-hover:bg-neutral-800 transition-colors">
+                                                    {act.topic === "Backend" ? "🗄️" : act.topic === "Frontend" ? "💻" : act.topic === "Machine Learning" ? "🧠" : act.topic === "DevOps" ? "⚙️" : "🌐"}
+                                                </div>
+                                                <div>
+                                                    <div className="font-semibold text-sm mb-0.5 text-neutral-200">{act.title}</div>
+                                                    <div className="text-xs text-neutral-500">{act.topic} • {new Date(act.timestamp).toLocaleDateString()}</div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <div className="font-semibold text-sm mb-0.5 text-neutral-200">{act.title}</div>
-                                                <div className="text-xs text-neutral-500">{act.topic} • {act.time}</div>
+                                            <div className={`px-2.5 py-1 rounded-md text-xs font-semibold ${act.status === "Success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                                act.status === "Partial" ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" :
+                                                    "bg-red-500/10 text-red-400 border border-red-500/20"
+                                                }`}>
+                                                {act.status}
                                             </div>
                                         </div>
-                                        <div className={`px-2.5 py-1 rounded-md text-xs font-semibold ${act.status === "Success" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                                            act.status === "Partial" ? "bg-yellow-500/10 text-yellow-400 border border-yellow-500/20" :
-                                                "bg-red-500/10 text-red-400 border border-red-500/20"
-                                            }`}>
-                                            {act.status}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </motion.div>
 
