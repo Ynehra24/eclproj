@@ -96,6 +96,12 @@ export default function Home() {
   const [showIntro, setShowIntro] = useState(true);
   const [initialTopics, setInitialTopics] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("sage_token")) {
+      setShowIntro(false);
+    }
+  }, []);
+
   const handleStart = (topics: string[]) => {
     setInitialTopics(topics);
     setShowIntro(false);
@@ -541,6 +547,13 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("sage_token")) {
+      setIsLoggedIn(true);
+    }
+  }, []);
 
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(initialTopics);
   const [openSections, setOpenSections] = useState<string[]>(
@@ -1786,12 +1799,16 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
             About SAGE
           </Link>
           <Link href="/profile" className="text-sm font-medium text-neutral-400 hover:text-white transition-colors px-3 py-2 rounded-lg hover:bg-neutral-900">
-            Dashboard
+            {isLoggedIn ? "Profile" : "Dashboard"}
           </Link>
-          <div className="w-px h-4 bg-neutral-800 mx-2" />
-          <Link href="/login" className="text-sm font-medium px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20 transition-all">
-            Login
-          </Link>
+          {!isLoggedIn && (
+            <>
+              <div className="w-px h-4 bg-neutral-800 mx-2" />
+              <Link href="/login" className="text-sm font-medium px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white shadow-lg shadow-orange-500/20 transition-all">
+                Login
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 
