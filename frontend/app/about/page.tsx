@@ -45,7 +45,7 @@ export default function AboutPage() {
             <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-orange-500/5 blur-[120px] rounded-full pointer-events-none" />
 
             {/* Header */}
-            <header className="absolute top-0 left-0 right-0 h-20 px-8 flex items-center justify-between z-10 border-b border-neutral-900/50 bg-neutral-950/30 backdrop-blur-md">
+            <header className="absolute top-0 left-0 right-0 h-20 px-8 flex items-center justify-between z-50 border-b border-neutral-900/50 bg-neutral-950/30 backdrop-blur-md">
                 <Link href="/" className="flex items-center gap-3 group">
                     <motion.div whileHover={{ rotate: 180 }} transition={{ duration: 0.4 }}>
                         <img src="/ECL_LOGO_Sage.png" className="w-8 h-8 rounded-sm" alt="SAGE" />
