@@ -776,3 +776,49 @@ def read_user_activities(
         models.UserActivity.user_id == current_user.id
     ).order_by(models.UserActivity.timestamp.desc()).offset(skip).limit(limit).all()
     return activities
+
+@app.get("/api/users/me/plan", response_model=schemas.PlanResponse)
+def generate_user_plan(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if not _groq_client:
+        raise HTTPException(status_code=500, detail="Groq API key not configured")
+
+    # Fetch recent activities
+    activities = db.query(models.UserActivity).filter(
+        models.UserActivity.user_id == current_user.id
+    ).order_by(models.UserActivity.timestamp.desc()).limit(20).all()
+
+    # Build prompt context
+    if not activities:
+        context_str = "User is brand new and has not completed any coding paths yet."
+    else:
+        log_lines = []
+        for a in activities:
+            log_lines.append(f"- Topic: {a.topic} | Result: {a.status} | Time: {a.timestamp.strftime('%Y-%m-%d')}")
+        context_str = "User's recent activity log:\n" + "\n".join(log_lines)
+
+    prompt = f"""
+You are an expert technical mentor and software engineering coach.
+Generate a structured, 3-day personalized study plan for this user based on their recent activity.
+Focus heavily on their 'Failed' or 'Partial' topics, while reinforcing their 'Success' topics.
+If they have no activity, provide a generic 3-day full-stack web development crash course.
+
+{context_str}
+
+Use strict GitHub-flavored Markdown. Include headers, bullet points, and brief encouraging advice. Do not output anything other than the markdown plan.
+"""
+
+    try:
+        response = _groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.1-8b-instant",
+            temperature=0.4,
+            max_tokens=800,
+        )
+        plan = response.choices[0].message.content or "Could not generate plan."
+        return {"plan_markdown": plan}
+    except Exception as e:
+        print("Error generating plan:", e)
+        raise HTTPException(status_code=500, detail="Failed to generate plan securely")

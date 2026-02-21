@@ -80,5 +80,7 @@ export const api = {
     logActivity: (activity: any) => fetchWithAuth("/users/me/activities", {
         method: "POST",
         body: JSON.stringify(activity),
-    })
+    }),
+
+    generatePlan: () => fetchWithAuth("/users/me/plan")
 };
