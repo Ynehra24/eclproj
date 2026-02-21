@@ -1,11 +1,14 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from database import engine, SessionLocal
 from sqlalchemy import text
 
 def run_migration():
-    print("Starting database migration...")
+    print(f"Starting database migration on {engine.url}...")
+    
     with engine.begin() as conn:
         try:
-            # Add exp column
             conn.execute(text("ALTER TABLE users ADD COLUMN exp INTEGER DEFAULT 0;"))
             print("Successfully added 'exp' column to users table.")
         except Exception as e:
@@ -13,9 +16,9 @@ def run_migration():
                 print("'exp' column already exists, skipping.")
             else:
                 print(f"Error adding 'exp' column: {e}")
-                
+
+    with engine.begin() as conn:
         try:
-            # Add profile_picture column
             conn.execute(text("ALTER TABLE users ADD COLUMN profile_picture VARCHAR;"))
             print("Successfully added 'profile_picture' column to users table.")
         except Exception as e:

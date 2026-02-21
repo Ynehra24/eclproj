@@ -82,5 +82,28 @@ export const api = {
         body: JSON.stringify(activity),
     }),
 
-    generatePlan: () => fetchWithAuth("/users/me/plan")
+    generatePlan: () => fetchWithAuth("/users/me/plan"),
+
+    uploadProfilePhoto: async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const token = getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+
+        const response = await fetch(`${API_BASE_URL}/users/me/photo`, {
+            method: "POST",
+            headers,
+            body: formData, // do not set Content-Type header manually for FormData
+        });
+
+        if (response.status === 401) {
+            clearToken();
+            throw new Error("Unauthorized - session expired");
+        }
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Photo upload failed");
+        return data;
+    }
 };

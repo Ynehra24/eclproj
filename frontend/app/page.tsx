@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import { api } from "../lib/api";
 
 const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 
@@ -1111,6 +1112,9 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
       setFeedback({ status: "correct", hint: "Good choice. Preview metrics improved." });
       setLastWrongIndex(null);
       applyOutcome("correct");
+      if (localStorage.getItem("sage_token")) {
+        api.logActivity({ topic: currentTopic, title: current.scenario.substring(0, 30) + '...', status: "Success", difficulty }).catch(e => console.error(e));
+      }
     } else {
       const remaining = attemptsLeft - 1;
       setAttemptsLeft(remaining);
@@ -1121,6 +1125,9 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
           hint: `Correct: ${current.options?.[correct]}\nReason: ${current.reason || "Best fits the scenario constraints."}`,
         });
         applyOutcome("wrongFinal");
+        if (localStorage.getItem("sage_token")) {
+          api.logActivity({ topic: currentTopic, title: current.scenario.substring(0, 30) + '...', status: "Failed", difficulty }).catch(e => console.error(e));
+        }
       } else {
         setFeedback({ status: "wrong", hint: current.hint || "Re-read the scenario and identify key constraints." });
         applyOutcome("wrongHint");
@@ -1144,6 +1151,9 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
         hint: `You entered: ${got}\nResult: Correct.\n\nReason: ${current.reason || ""}`,
       });
       applyOutcome("correct");
+      if (localStorage.getItem("sage_token")) {
+        api.logActivity({ topic: currentTopic, title: current.scenario.substring(0, 30) + '...', status: "Success", difficulty }).catch(e => console.error(e));
+      }
     } else {
       const remaining = attemptsLeft - 1;
       setAttemptsLeft(remaining);
@@ -1201,6 +1211,9 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
         hint: `Looks good.\n\nRubric:\n- ${(current.rubric || []).join("\n- ")}`,
       });
       applyOutcome("correct");
+      if (localStorage.getItem("sage_token")) {
+        api.logActivity({ topic: currentTopic, title: current.scenario.substring(0, 30) + '...', status: "Success", difficulty }).catch(e => console.error(e));
+      }
     } else {
       const remaining = attemptsLeft - 1;
       setAttemptsLeft(remaining);
@@ -1212,6 +1225,9 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
           )}`,
         });
         applyOutcome("wrongFinal");
+        if (localStorage.getItem("sage_token")) {
+          api.logActivity({ topic: currentTopic, title: current.scenario.substring(0, 30) + '...', status: "Failed", difficulty }).catch(e => console.error(e));
+        }
       } else {
         setFeedback({
           status: "wrong",
@@ -1244,8 +1260,14 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
     setCodeScore01(s01);
 
     // keep it gentle: only improve when strong signal, otherwise "wrongHint"
-    if (s01 >= 0.85) applyOutcome("correct");
-    else applyOutcome("wrongHint");
+    if (s01 >= 0.85) {
+      applyOutcome("correct");
+      if (localStorage.getItem("sage_token")) {
+        api.logActivity({ topic: currentTopic, title: current.scenario.substring(0, 30) + '...', status: "Success", difficulty }).catch(e => console.error(e));
+      }
+    } else {
+      applyOutcome("wrongHint");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, current]);
 

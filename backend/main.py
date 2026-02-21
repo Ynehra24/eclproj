@@ -9,6 +9,7 @@ import io
 import random
 import json
 import re
+from datetime import datetime
 
 # Database & Auth Integrations
 from sqlalchemy.orm import Session
@@ -31,6 +32,11 @@ GROQ_API_KEY = os.getenv("GROQAPI_KEY", "")
 _groq_client: Optional[Groq] = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 app = FastAPI()
+
+# Ensure uploads directory exists
+os.makedirs("uploads", exist_ok=True)
+from fastapi.staticfiles import StaticFiles
+app.mount("/api/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -755,6 +761,7 @@ def create_user_activity(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(get_current_user)
 ):
+    # 1. Save Actvity
     db_activity = models.UserActivity(
         user_id=current_user.id,
         topic=activity.topic,
@@ -762,6 +769,23 @@ def create_user_activity(
         status=activity.status
     )
     db.add(db_activity)
+
+    # 2. Grant EXP if successful
+    if activity.status == "Success":
+        difficulty_multipliers = {
+            "Middle School": 10,
+            "High School": 25,
+            "Bachelor": 50,
+            "Master": 100,
+            "PHD": 150,
+            "Veteran": 250
+        }
+        # Use difficulty passed from frontend, default to Bachelor
+        base_exp = difficulty_multipliers.get(getattr(activity, "difficulty", "Bachelor"), 50)
+        
+        current_user.exp += base_exp
+        db.add(current_user)
+
     db.commit()
     db.refresh(db_activity)
     return db_activity
@@ -822,3 +846,35 @@ Use strict GitHub-flavored Markdown. Include headers, bullet points, and brief e
     except Exception as e:
         print("Error generating plan:", e)
         raise HTTPException(status_code=500, detail="Failed to generate plan securely")
+
+
+@app.post("/api/users/me/photo")
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File provided is not an image")
+    
+    # Save file to disk
+    file_ext = file.filename.split(".")[-1]
+    filename = f"user_{current_user.id}_{int(datetime.utcnow().timestamp())}.{file_ext}"
+    file_path = os.path.join("uploads", filename)
+    
+    with open(file_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+        
+    # Generate the static URL map
+    photo_url = f"{API_BASE_URL.replace('/api', '')}/api/uploads/{filename}"
+    if not 'API_BASE_URL' in globals():
+        photo_url = f"http://localhost:8000/api/uploads/{filename}"
+        
+    # Update DB
+    current_user.profile_picture = photo_url
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    
+    return {"profile_picture": photo_url}
