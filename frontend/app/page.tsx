@@ -476,20 +476,42 @@ function MainApp() {
 
   // --------- Preview Value Selectors ---------
   const currentTopic = useMemo(() => {
-    const hasBackend = selectedSubjects.some((s) => ["APIs", "Databases", "Caching", "Redis", "Kafka"].includes(s));
-    const hasFrontend = selectedSubjects.some((s) => ["React", "CSS", "Web Performance", "SSR", "Hydration"].includes(s));
-    const hasML = selectedSubjects.some((s) => ["Model Training", "Regularization", "Evaluation"].includes(s));
+    // 1. First, try to extract the organic topic assigned to the CURRENT question by the LLM
+    let activeTopicNames: string[] = selectedSubjects;
+
+    if (questions[currentIdx]?.scenario) {
+      const match = questions[currentIdx].scenario.match(/\(Topic:\s*(.*?)\)/i);
+      if (match && match[1]) {
+        // Splitting by ' and ' to handle grouped multi-part topics
+        activeTopicNames = match[1].split(/\s+and\s+/i).map(t => t.trim());
+      }
+    }
+
+    const hasBackend = activeTopicNames.some((s) =>
+      SUBJECTS.find(sub => sub.name === "Backend" || sub.name === "DevOps" || sub.name === "System Design" || sub.name === "Security" || sub.name === "Data Engineering")?.items.includes(s) ||
+      ["APIs", "Databases", "Caching", "Redis", "Kafka"].includes(s)
+    );
+
+    const hasFrontend = activeTopicNames.some((s) =>
+      SUBJECTS.find(sub => sub.name === "Frontend" || sub.name === "Mobile")?.items.includes(s) ||
+      ["React", "CSS", "Web Performance", "SSR", "Hydration"].includes(s)
+    );
+
+    const hasML = activeTopicNames.some((s) =>
+      SUBJECTS.find(sub => sub.name === "Machine Learning")?.items.includes(s) ||
+      ["Model Training", "Regularization", "Evaluation"].includes(s)
+    );
+
     if (hasBackend) return "backend";
     if (hasFrontend) return "frontend";
     if (hasML) return "ml";
+
     return "generic";
-  }, [selectedSubjects]);
+  }, [selectedSubjects, questions, currentIdx]);
 
   useEffect(() => {
-    const hasBackend = selectedSubjects.some((s) => ["APIs", "Databases", "Caching", "Redis", "Kafka"].includes(s));
-    const hasFrontend = selectedSubjects.some((s) => ["React", "CSS", "Web Performance", "SSR", "Hydration"].includes(s));
-    const hasML = selectedSubjects.some((s) => ["Model Training", "Regularization", "Evaluation"].includes(s));
-    if (hasBackend) {
+    // React directly to the new `currentTopic` instead of recalculating via `selectedSubjects`
+    if (currentTopic === "backend") {
       setBackend({
         apiLoad: 0.5,
         apiErrors: 0.02,
@@ -499,7 +521,7 @@ function MainApp() {
         latency: previewControls.useReadReplicas ? 48 : 62,
       });
     }
-    if (hasFrontend) {
+    if (currentTopic === "frontend") {
       setFrontend({
         fps: 58,
         bundleKB: previewControls.enableCodeSplit ? 360 : 520,
@@ -507,7 +529,7 @@ function MainApp() {
         reRenders: previewControls.enableMemo ? 2 : 5,
       });
     }
-    if (hasML) {
+    if (currentTopic === "ml") {
       setML({
         trainLoss: 0.55,
         valLoss: previewControls.mlReg ? 0.62 : 0.78,
@@ -516,7 +538,7 @@ function MainApp() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubjects, previewControls.enableCache, previewControls.useReadReplicas, previewControls.enableCodeSplit, previewControls.enableMemo, previewControls.mlReg]);
+  }, [currentTopic, previewControls.enableCache, previewControls.useReadReplicas, previewControls.enableCodeSplit, previewControls.enableMemo, previewControls.mlReg]);
 
   // --------- Scenario Generation (API Call) ---------
   const generateScenario = async () => {
