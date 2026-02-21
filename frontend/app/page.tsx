@@ -1362,6 +1362,14 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
   };
 
   // --------- Live Preview UI ----------
+  // idleHeat drives white→yellow→orange→red color progression on stat values
+  const idleHeat = (() => {
+    if (idleSeconds >= 24) return "red";
+    if (idleSeconds >= 16) return "orange";
+    if (idleSeconds >= 8) return "yellow";
+    return "none";
+  })();
+
   const Stat = ({
     label,
     value,
@@ -1377,20 +1385,27 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
     changed?: boolean;
     danger?: boolean;
   }) => {
-    const valueClass = danger
-      ? "text-red-200"
-      : changed
-        ? "text-orange-300"
-        : good
-          ? "text-emerald-300"
-          : "text-neutral-200";
+    // Idle heat overrides normal good/changed colour — only when not already danger
+    const heatClass =
+      danger ? "text-red-200"
+        : idleHeat === "red" ? "text-red-300"
+          : idleHeat === "orange" ? "text-orange-300"
+            : idleHeat === "yellow" ? "text-yellow-200"
+              : changed ? "text-orange-300"
+                : good ? "text-emerald-300"
+                  : "text-neutral-200";
 
-    const ringClass = danger ? "ring-1 ring-red-600/40 border-red-700/40" : "border-neutral-800";
+    const ringClass = danger
+      ? "ring-1 ring-red-600/40 border-red-700/40"
+      : idleHeat === "red" ? "border-red-700/30"
+        : idleHeat === "orange" ? "border-orange-700/30"
+          : idleHeat === "yellow" ? "border-yellow-700/20"
+            : "border-neutral-800";
 
     return (
-      <div className={`flex items-center justify-between gap-3 rounded-xl border bg-neutral-950/60 px-3 py-2 ${ringClass}`}>
+      <div className={`flex items-center justify-between gap-3 rounded-xl border bg-neutral-950/60 px-3 py-2 transition-colors duration-700 ${ringClass}`}>
         <div className="text-xs uppercase tracking-wide text-neutral-400">{label}</div>
-        <div className={`text-sm font-semibold ${valueClass}`}>
+        <div className={`text-sm font-semibold transition-colors duration-700 ${heatClass}`}>
           {value}
           {unit ? <span className="text-neutral-400 font-medium ml-1">{unit}</span> : null}
         </div>
@@ -2349,43 +2364,56 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
 
                   return (
                     <>
-                      {/* Incident popup — shown on wrong code submit */}
-                      <AnimatePresence>
-                        {showIncidentPopup && current?.type === "Coding" && feedback.status === "wrong" && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -12, scale: 0.97 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -12, scale: 0.97 }}
-                            transition={{ duration: 0.22 }}
-                            className="absolute top-0 left-0 right-0 z-20 mx-0 mb-4"
-                          >
-                            <div className="bg-neutral-950 border border-red-600/40 rounded-2xl shadow-2xl shadow-red-900/20 p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-base">{inc.icon}</span>
-                                  <span className="text-xs font-bold uppercase tracking-widest text-red-400">{inc.title}</span>
-                                  <span className="inline-flex items-center gap-1">
+                      {/* Incident popup — full-screen fixed modal, instant appearance */}
+                      {showIncidentPopup && current?.type === "Coding" && feedback.status === "wrong" && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                          <div className="w-full max-w-md mx-4 bg-neutral-950 border border-red-600/50 rounded-2xl shadow-2xl shadow-red-900/30 overflow-hidden">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-red-600/20 bg-red-950/20">
+                              <div className="flex items-center gap-2.5">
+                                <span className="text-xl">{inc.icon}</span>
+                                <div>
+                                  <div className="text-xs font-bold uppercase tracking-widest text-red-400">{inc.title}</div>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
                                     <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />
-                                    <span className="text-[10px] text-red-400 uppercase tracking-widest">LIVE</span>
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => setShowIncidentPopup(false)}
-                                  className="text-neutral-500 hover:text-neutral-300 text-lg leading-none"
-                                >×</button>
-                              </div>
-                              <div className="space-y-1.5 font-mono text-xs">
-                                {inc.rows.map((row, i) => (
-                                  <div key={i} className="flex items-center justify-between gap-4">
-                                    <span className="text-neutral-500">{row.label}</span>
-                                    <span className={row.bad ? "text-red-300" : "text-neutral-300"}>{row.value}</span>
+                                    <span className="text-[10px] text-red-400 uppercase tracking-widest">INCIDENT ACTIVE</span>
                                   </div>
-                                ))}
+                                </div>
                               </div>
                             </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
+
+                            {/* Log rows */}
+                            <div className="px-5 py-4 space-y-2 font-mono text-xs">
+                              {inc.rows.map((row, i) => (
+                                <div key={i} className="flex items-center justify-between gap-4 py-1 border-b border-neutral-800/50 last:border-0">
+                                  <span className="text-neutral-500">{row.label}</span>
+                                  <span className={row.bad ? "text-red-300 font-semibold" : "text-neutral-300"}>{row.value}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3 px-5 pb-5">
+                              <button
+                                onClick={() => setShowIncidentPopup(false)}
+                                className="flex-1 py-2.5 rounded-xl border border-neutral-700 text-neutral-300 text-sm font-medium hover:bg-neutral-800 transition"
+                              >
+                                Dismiss
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowIncidentPopup(false);
+                                  gotoNext();
+                                }}
+                                disabled={currentIdx >= questions.length - 1}
+                                className="flex-1 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:bg-neutral-800 disabled:text-neutral-500 text-white text-sm font-semibold transition"
+                              >
+                                Next Question →
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <div className={`bg-neutral-900 p-5 rounded-2xl shadow-lg h-full border border-neutral-800 min-w-0 ${previewOutline}`}>
                         <div className="flex items-center justify-between gap-3 mb-3">
