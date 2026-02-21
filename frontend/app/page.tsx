@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inter } from "next/font/google";
+import Link from "next/link";
 
 const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 
@@ -1775,11 +1776,16 @@ function MainApp({ initialTopics = [] }: { initialTopics?: string[] }) {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="h-16 border-b border-neutral-900 bg-neutral-950/70 backdrop-blur flex items-center px-6">
+      <header className="h-16 border-b border-neutral-900 bg-neutral-950/70 backdrop-blur flex items-center justify-between px-6 z-10 relative">
         <div className="flex items-center gap-3">
           <img src="/ECL_LOGO_Sage.png" className="w-7 h-7 rounded-sm" alt="SAGE" />
           <span className="font-semibold text-xl tracking-wide">SAGE</span>
         </div>
+        <nav>
+          <Link href="/about" className="text-sm font-medium text-neutral-400 hover:text-orange-400 transition-colors px-3 py-2 rounded-lg hover:bg-orange-500/10">
+            About SAGE
+          </Link>
+        </nav>
       </header>
 
       <div className="flex h-[calc(100vh-64px)]">
