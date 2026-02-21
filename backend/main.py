@@ -389,7 +389,12 @@ def call_openrouter(subjects: List[str], types: List[str], count: int) -> List[Q
     prompt += (
         "Return ONLY a valid JSON array.\n"
         "No markdown. No explanations.\n"
-        "If a question is of type 'Coding', you MUST optionally include a 'language' string field indicating the detected programming language (e.g. 'python', 'typescript', 'javascript', 'sql', 'bash', 'css', 'html').\n"
+        "For 'Coding' type questions, you MUST include:\n"
+        "1) 'starterCode': a template for the user.\n"
+        "2) 'answer': the COMPLETE, WORKING correct code solution.\n"
+        "3) 'hint': a helpful nudge if they get it wrong once.\n"
+        "4) 'reason': a detailed explanation of WHY that solution is correct.\n"
+        "5) 'language': the programming language identifier (e.g. 'python', 'typescript', 'javascript', 'sql', 'bash').\n"
     )
 
     headers = {
@@ -436,7 +441,6 @@ def call_openrouter(subjects: List[str], types: List[str], count: int) -> List[Q
             if q.type == "Coding":
                 q.options = None
                 q.correctIndex = None
-                q.answer = None
 
                 if not q.language:
                     # Provide a fallback just in case the LLM doesn't supply it
