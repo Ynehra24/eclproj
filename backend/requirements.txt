@@ -1,11 +1,9 @@
 fastapi
-uvicorn[standard]
-gunicorn
-
-openai
-python-dotenv
-
+uvicorn
 pydantic
+python-dotenv
 groq
-
 sqlalchemy
+python-jose
+passlib
+python-multipart
