@@ -648,17 +648,12 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
 # -----------------------------
 # Routes
 # -----------------------------
-@app.get("/")
-def root():
-    return {"message": "Backend is running"}
-
-
-@app.get("/health")
+@app.get("/api/health")
 def health():
     return {"status": "ok"}
 
 
-@app.post("/generate")
+@app.post("/api/generate")
 def generate_questions(req: GenerateRequest):
     if not req.subjects:
         raise HTTPException(status_code=400, detail="subjects must not be empty")
@@ -672,7 +667,7 @@ def generate_questions(req: GenerateRequest):
 
     return {"questions": [q.dict() for q in questions]}
 
-@app.post("/extract-topics", response_model=ExtractTopicsResponse)
+@app.post("/api/extract-topics", response_model=ExtractTopicsResponse)
 async def extract_topics(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files supported")
@@ -882,11 +877,6 @@ async def upload_profile_photo(
     with open(file_path, "wb") as f:
         content = await file.read()
         f.write(content)
-        
-    # Generate the static URL map
-    photo_url = f"{API_BASE_URL.replace('/api', '')}/api/uploads/{filename}"
-    if not 'API_BASE_URL' in globals():
-        photo_url = f"http://localhost:8000/api/uploads/{filename}"
         
     # Update DB
     current_user.profile_picture = photo_url
