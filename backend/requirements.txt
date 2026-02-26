@@ -7,3 +7,4 @@ sqlalchemy
 python-jose
 passlib
 python-multipart
+psycopg2
